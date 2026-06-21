@@ -45,10 +45,12 @@ _USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 )
-_CONTROL_RETRIES = 6
-# Seconds between control-call retries — long enough to let a sleeping charger
-# wake and start answering.
-_WAKE_RETRY_DELAY = 1.5
+_CONTROL_RETRIES = 3
+# Seconds between control-call retries. This covers the transient first-request
+# drop the charger shows *while awake*. It does NOT wake a sleeping charger —
+# that only happens via the physical power button or an actual charging event —
+# so we keep the budget small to avoid hanging against an asleep device.
+_RETRY_DELAY = 1.0
 
 
 class PmccCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -196,11 +198,12 @@ class PmccCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self._control_session
 
     async def _request(self, method: str, url: str, **kwargs) -> aiohttp.ClientResponse:
-        """Issue a control request, retrying while the charger wakes up.
+        """Issue a control request, retrying the transient first-request drop.
 
-        The charger deep-sleeps when idle: the first request(s) wake it but are
-        dropped, then it answers. We retry with a delay to give it time to come
-        up rather than treating the drop as a hard failure.
+        While awake the charger occasionally drops the first request on a fresh
+        connection; a retry then succeeds. If the charger is asleep (only the
+        power button or a charging event wakes it) every attempt fails and we
+        raise after a small fixed budget rather than blocking.
         """
         session = self._get_control_session()
         last_err: Exception | None = None
@@ -209,8 +212,8 @@ class PmccCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return await session.request(method, url, ssl=False, **kwargs)
             except (aiohttp.ServerDisconnectedError, aiohttp.ClientConnectionError) as err:
                 last_err = err
-                await asyncio.sleep(_WAKE_RETRY_DELAY)
-        raise PmccError(f"Charger unreachable after retries: {last_err}")
+                await asyncio.sleep(_RETRY_DELAY)
+        raise PmccError(f"Charger unreachable (asleep?) after retries: {last_err}")
 
     async def _login(self) -> None:
         url = f"https://{self.host}{JWT_LOGIN_PATH}"

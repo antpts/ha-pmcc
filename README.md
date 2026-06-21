@@ -37,7 +37,14 @@ directory and restart.
 - Many low-level diagnostic metrics are exposed but **disabled by default** —
   enable them per entity if you need them.
 - The current limit ranges from 6 A to 20 A (this unit's HMI range); values
-  below 6 A are rounded up to the 6 A minimum charging current.
+  below 6 A are rounded up to the 6 A minimum charging current. The HMI limit
+  reverts to maximum when the charger goes idle, so a set value is not
+  necessarily persistent.
+- **The charger sleeps when idle and only wakes via its power button or an
+  actual charging event — not from network requests.** While asleep it's
+  unreachable, so sensors stop updating and the **Connected** binary sensor goes
+  off. Values refresh whenever it's awake; the total-energy sensor is restored
+  across restarts so it doesn't reset to unknown.
 
 ## Credits
 Protocol reverse-engineering derived from
