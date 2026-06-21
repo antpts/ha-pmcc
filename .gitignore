@@ -1,0 +1,9 @@
+# Local tooling — not part of the integration
+.venv/
+ref/
+config.json
+.claude/
+
+# Python
+__pycache__/
+*.pyc
