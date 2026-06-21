@@ -175,15 +175,13 @@ METRICS: dict[str, dict] = {
 
     # ---- WebServer: Cumulative charging data ----
     # Lifetime total pushed over the WebSocket during sessions only (the REST
-    # endpoint is 403 for the home user). The reliable always-available total is
-    # the history-derived sensor in sensor.py; this one is off by default to
-    # avoid a duplicate "Total charging energy" entity.
+    # endpoint is 403 for the home user, and the charger only streams while
+    # awake/charging). Enabled so a charging session reveals whether it streams.
     "de.bebro.WebServer.cumulativeChargingData.totalEnergy": {
-        "pretty_name": "Total charging energy (live push)",
+        "pretty_name": "Total charging energy (live)",
         "unit": "kWh",
         "device_class": "energy",
         "state_class": "total_increasing",
-        "enabled_by_default": False,
     },
     "de.bebro.WebServer.cumulativeChargingData.totalTime": {
         "pretty_name": "Total charging time",
