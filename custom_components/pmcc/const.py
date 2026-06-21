@@ -218,7 +218,7 @@ METRICS: dict[str, dict] = {
         "pretty_name": "Remaining charging time", "unit": "s", "device_class": "duration", "state_class": "measurement",
     },
     "de.bebro.WebServer.swaggerCurrentSession.selfEnergy": {
-        "pretty_name": "Self-generated energy", "unit": "kWh", "device_class": "energy", "state_class": "measurement",
+        "pretty_name": "Self-generated energy", "unit": "kWh", "device_class": "energy", "state_class": "total_increasing",
     },
     "de.bebro.WebServer.swaggerCurrentSession.sessionId": {"pretty_name": "Session ID"},
     "de.bebro.WebServer.swaggerCurrentSession.soc": {
