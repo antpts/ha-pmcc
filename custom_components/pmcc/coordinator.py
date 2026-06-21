@@ -13,11 +13,14 @@ import json
 import logging
 from typing import Any
 
+from datetime import datetime
+
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CURRENT_LIMIT_PATH,
@@ -54,6 +57,8 @@ class PmccCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.password = password
         self.data = {}
         self.current_limit: int | None = None
+        self.connected = False
+        self.last_message_time: datetime | None = None
 
         self._session = async_get_clientsession(hass, verify_ssl=False)
         self._control_session: aiohttp.ClientSession | None = None
@@ -95,6 +100,7 @@ class PmccCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     url, headers=headers, heartbeat=WS_HEARTBEAT, ssl=False
                 ) as ws:
                     _LOGGER.info("Connected to charger %s", self.host)
+                    self._set_connected(True)
                     backoff = 5
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
@@ -123,6 +129,7 @@ class PmccCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not updates:
             return
         self.data.update(updates)
+        self.last_message_time = dt_util.utcnow()
         self._schedule_update()
 
     @callback
@@ -139,7 +146,15 @@ class PmccCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data(dict(self.data))
 
     @callback
+    def _set_connected(self, value: bool) -> None:
+        """Update connectivity and notify entities if it changed."""
+        if self.connected != value:
+            self.connected = value
+            self.async_update_listeners()
+
+    @callback
     def _mark_offline(self) -> None:
+        self._set_connected(False)
         if self.last_update_success:
             self.last_update_success = False
             self.async_update_listeners()

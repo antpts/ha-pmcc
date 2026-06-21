@@ -20,6 +20,16 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "connected": {
+        "name": "Connected"
+      }
+    },
+    "sensor": {
+      "last_update": {
+        "name": "Last update"
+      }
+    },
     "number": {
       "current_limit": {
         "name": "Charging current limit"

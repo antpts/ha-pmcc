@@ -9,7 +9,11 @@ from homeassistant.core import HomeAssistant
 from .const import CONF_HOST, CONF_PASSWORD, DOMAIN
 from .coordinator import PmccCoordinator
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER]
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.SENSOR,
+    Platform.NUMBER,
+]
 
 type PmccConfigEntry = ConfigEntry[PmccCoordinator]
 

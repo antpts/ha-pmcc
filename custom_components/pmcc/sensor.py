@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -59,12 +60,14 @@ async def async_setup_entry(
     entry: PmccConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create sensors for every known metric."""
+    """Create sensors for every known metric, plus a last-update timestamp."""
     coordinator = entry.runtime_data
-    async_add_entities(
+    entities: list[SensorEntity] = [PmccLastUpdate(coordinator)]
+    entities.extend(
         PmccSensor(coordinator, _build_description(key, cfg))
         for key, cfg in METRICS.items()
     )
+    async_add_entities(entities)
 
 
 class PmccSensor(PmccEntity, SensorEntity):
@@ -87,3 +90,24 @@ class PmccSensor(PmccEntity, SensorEntity):
         if isinstance(value, str):
             return value[:_MAX_STATE_LEN]
         return value
+
+
+class PmccLastUpdate(PmccEntity, SensorEntity):
+    """Timestamp of the most recent message received from the charger."""
+
+    _attr_translation_key = "last_update"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: PmccCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_last_update"
+
+    @property
+    def available(self) -> bool:
+        # Keep showing the last-seen time even while the link is down.
+        return True
+
+    @property
+    def native_value(self) -> datetime | None:
+        return self.coordinator.last_message_time
