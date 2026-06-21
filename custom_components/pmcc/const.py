@@ -13,7 +13,11 @@ WS_PATH = "/ws"
 JWT_LOGIN_PATH = "/jwt/login"
 JWT_REFRESH_PATH = "/jwt/refresh"
 CURRENT_LIMIT_PATH = "/v1/api/SCC/properties/propHMICurrentLimit"
+HISTORY_PATH = "/v1/api/WebServer/properties/swaggerHistory"
 WEB_USER = "user"
+
+# How often to poll the REST API for charging history / current limit (seconds).
+POLL_INTERVAL = 300
 
 # Current limit bounds (Amps), per this charger's HMI range (6-20 A).
 # Values below the minimum charging current are rounded up to it.
@@ -170,11 +174,16 @@ METRICS: dict[str, dict] = {
     "de.bebro.WebServer.swaggerHistory": {"pretty_name": "Charging history", "entity_category": "diagnostic"},
 
     # ---- WebServer: Cumulative charging data ----
+    # Lifetime total pushed over the WebSocket during sessions only (the REST
+    # endpoint is 403 for the home user). The reliable always-available total is
+    # the history-derived sensor in sensor.py; this one is off by default to
+    # avoid a duplicate "Total charging energy" entity.
     "de.bebro.WebServer.cumulativeChargingData.totalEnergy": {
-        "pretty_name": "Total charging energy",
+        "pretty_name": "Total charging energy (live push)",
         "unit": "kWh",
         "device_class": "energy",
         "state_class": "total_increasing",
+        "enabled_by_default": False,
     },
     "de.bebro.WebServer.cumulativeChargingData.totalTime": {
         "pretty_name": "Total charging time",

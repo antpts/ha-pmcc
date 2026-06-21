@@ -28,6 +28,15 @@
     "sensor": {
       "last_update": {
         "name": "Last update"
+      },
+      "total_energy": {
+        "name": "Total charging energy"
+      },
+      "last_session_energy": {
+        "name": "Last session energy"
+      },
+      "last_session_end": {
+        "name": "Last session end"
       }
     },
     "number": {

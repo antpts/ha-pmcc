@@ -156,6 +156,52 @@ async def probe_set_limit(host: str, password: str, value: int) -> None:
         await session.close()
 
 
+async def probe_discover(host: str, password: str, user: str = "user") -> None:
+    """Login as `user`, then GET candidate REST endpoints (incl. privileged ones)."""
+    connector = aiohttp.TCPConnector(ssl=False, force_close=True)
+    headers = {"User-Agent": _UA, "Referer": f"https://{host}/", "Origin": f"https://{host}"}
+    session = aiohttp.ClientSession(connector=connector, headers=headers)
+
+    async def req(method, url, **kw):
+        for _ in range(3):
+            try:
+                return await session.request(method, url, ssl=False, **kw)
+            except (aiohttp.ServerDisconnectedError, aiohttp.ClientConnectionError):
+                await asyncio.sleep(0.5)
+        return None
+
+    candidates = [
+        "/v1/api/WebServer/properties/cumulativeChargingData",
+        "/v1/api/WebServer/properties/swaggerCurrentSession",
+        "/v1/api/WebServer/properties/swaggerCurve",
+        "/v1/api/WebServer/properties/swaggerHistory",
+        "/v1/api/SCC/properties/propHMICurrentLimit",
+        "/v1/api/iCAN/properties/activePowerL1",
+    ]
+    try:
+        print(f"[disc] login as user={user!r} ...")
+        resp = await req("POST", f"https://{host}/jwt/login",
+                         data={"user": user, "pass": password},
+                         headers={"Accept": "application/json"})
+        async with resp:
+            if resp.status != 200:
+                print(f"[disc] login failed HTTP {resp.status} for user={user!r} (stopping; try another username)")
+                return
+            token = (await resp.json(content_type=None))["token"]
+            print(f"[disc] login OK as user={user!r}")
+        auth = {"Authorization": f"Bearer {token}"}
+        for path in candidates:
+            r = await req("GET", f"https://{host}{path}", headers=auth)
+            if r is None:
+                print(f"[disc] {path} -> unreachable")
+                continue
+            async with r:
+                body = (await r.text())[:240].replace("\n", " ")
+                print(f"[disc] {path} -> HTTP {r.status}: {body}")
+    finally:
+        await session.close()
+
+
 async def main() -> None:
     host = os.environ.get("PMCC_HOST") or (sys.argv[1] if len(sys.argv) > 1 else "")
     password = os.environ.get("PMCC_PASS") or (sys.argv[2] if len(sys.argv) > 2 else "")
@@ -163,7 +209,11 @@ async def main() -> None:
     if not host:
         print(__doc__)
         sys.exit(1)
-    await probe_ws(host)
+    if os.environ.get("PMCC_DISCOVER") and password:
+        await probe_discover(host, password, os.environ.get("PMCC_USER", "user"))
+        return
+    seconds = float(os.environ.get("PMCC_WS_SECONDS", "8"))
+    await probe_ws(host, seconds)
     if password:
         await probe_login(host, password)
         if set_value:
