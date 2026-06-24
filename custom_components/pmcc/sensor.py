@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -17,7 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import PmccConfigEntry
-from .const import METRICS, SOC_UNKNOWN
+from .const import KEY_TOTAL_ENERGY, METRICS, SOC_UNKNOWN
 from .coordinator import PmccCoordinator
 from .entity import PmccEntity
 
@@ -63,10 +64,12 @@ async def async_setup_entry(
     """Create sensors for every known metric, plus a last-update timestamp."""
     coordinator = entry.runtime_data
     entities: list[SensorEntity] = [PmccLastUpdate(coordinator)]
-    entities.extend(
-        PmccSensor(coordinator, _build_description(key, cfg))
-        for key, cfg in METRICS.items()
-    )
+    for key, cfg in METRICS.items():
+        description = _build_description(key, cfg)
+        if key == KEY_TOTAL_ENERGY:
+            entities.append(PmccTotalEnergy(coordinator, description))
+        else:
+            entities.append(PmccSensor(coordinator, description))
     async_add_entities(entities)
 
 
@@ -117,3 +120,42 @@ class PmccLastUpdate(PmccEntity, SensorEntity):
     @property
     def native_value(self) -> datetime | None:
         return self.coordinator.last_message_time
+
+
+class PmccTotalEnergy(PmccEntity, RestoreSensor):
+    """Lifetime charging energy (live), but holds its last value.
+
+    The charger only streams this while awake/charging and then sleeps/drops
+    WiFi. Rather than going unavailable, this sensor keeps showing the last
+    value, restores it across restarts, and never decreases (it's a
+    total_increasing meter).
+    """
+
+    _attr_suggested_display_precision = 3
+
+    def __init__(
+        self, coordinator: PmccCoordinator, description: SensorEntityDescription
+    ) -> None:
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{description.key}"
+        self._restored: float | None = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_sensor_data()
+        if last is not None and last.native_value is not None:
+            self._restored = float(last.native_value)
+
+    @property
+    def available(self) -> bool:
+        # Hold the last reading even when the charger is asleep/offline.
+        return True
+
+    @property
+    def native_value(self) -> float | None:
+        live = self.coordinator.data.get(self.entity_description.key)
+        candidates = [
+            float(v) for v in (live, self._restored) if v is not None
+        ]
+        return max(candidates) if candidates else None

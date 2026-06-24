@@ -18,6 +18,9 @@ WEB_USER = "user"
 # State of charge fields report -1 when the vehicle doesn't share SoC.
 SOC_UNKNOWN = -1
 
+# The lifetime energy total gets special handling (hold last value + restore).
+KEY_TOTAL_ENERGY = "de.bebro.WebServer.cumulativeChargingData.totalEnergy"
+
 # Current limit bounds (Amps), per this charger's HMI range (6-20 A).
 # Values below the minimum charging current are rounded up to it.
 MIN_CURRENT = 6

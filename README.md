@@ -43,8 +43,9 @@ directory and restart.
 - **The charger sleeps when idle and only wakes via its power button or an
   actual charging event — not from network requests.** While asleep it's
   unreachable, so sensors stop updating and the **Connected** binary sensor goes
-  off. Values refresh whenever it's awake; the total-energy sensor is restored
-  across restarts so it doesn't reset to unknown.
+  off. Most live sensors (power, rate) go unavailable while asleep, but the
+  **Total charging energy** sensor holds its last value (and restores it across
+  restarts) so the Energy Dashboard has no gaps.
 
 ## Credits
 Protocol reverse-engineering derived from
