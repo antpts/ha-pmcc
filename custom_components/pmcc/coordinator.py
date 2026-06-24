@@ -24,11 +24,9 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CURRENT_LIMIT_PATH,
-    HISTORY_PATH,
     JWT_LOGIN_PATH,
     MAX_CURRENT,
     MIN_NONZERO_CURRENT,
-    POLL_INTERVAL,
     UPDATE_DEBOUNCE,
     WEB_USER,
     WS_HEARTBEAT,
@@ -66,28 +64,20 @@ class PmccCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.current_limit: int | None = None
         self.connected = False
         self.last_message_time: datetime | None = None
-        self.total_energy_kwh: float | None = None
-        self.last_session: dict[str, Any] | None = None
 
         self._session = async_get_clientsession(hass, verify_ssl=False)
         self._control_session: aiohttp.ClientSession | None = None
         self._ws_task: asyncio.Task | None = None
-        self._poll_task: asyncio.Task | None = None
         self._flush_handle: asyncio.TimerHandle | None = None
         self._token: str | None = None
 
     # ---- lifecycle -------------------------------------------------------
 
     async def async_start(self) -> None:
-        """Launch the background WebSocket listener and (if able) the REST poll."""
+        """Launch the background WebSocket listener."""
         self._ws_task = self.config_entry.async_create_background_task(
             self.hass, self._ws_loop(), name=f"pmcc-ws-{self.host}"
         )
-        # The history/current-limit REST endpoints require the JWT login.
-        if self.password:
-            self._poll_task = self.config_entry.async_create_background_task(
-                self.hass, self._poll_loop(), name=f"pmcc-poll-{self.host}"
-            )
 
     async def async_shutdown(self) -> None:
         """Stop the listener and cancel any pending flush."""
@@ -97,9 +87,6 @@ class PmccCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._ws_task is not None:
             self._ws_task.cancel()
             self._ws_task = None
-        if self._poll_task is not None:
-            self._poll_task.cancel()
-            self._poll_task = None
         if self._control_session is not None:
             await self._control_session.close()
             self._control_session = None
@@ -256,60 +243,6 @@ class PmccCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 break
 
         self.current_limit = value
-        self.async_update_listeners()
-
-    # ---- REST polling (history + current limit) -------------------------
-
-    async def _authed_get(self, path: str) -> Any:
-        """Authenticated GET that decodes the charger's (sometimes double-
-        encoded) JSON, re-logging in once on an expired token."""
-        if self._token is None:
-            await self._login()
-        for attempt in (1, 2):
-            resp = await self._request(
-                "GET",
-                f"https://{self.host}{path}",
-                headers={"Authorization": f"Bearer {self._token}"},
-            )
-            async with resp:
-                if resp.status in (401, 403) and attempt == 1:
-                    await self._login()
-                    continue
-                if resp.status != 200:
-                    raise PmccError(f"GET {path} -> HTTP {resp.status}")
-                text = await resp.text()
-            data = json.loads(text)
-            # Some endpoints return JSON encoded as a JSON string.
-            return json.loads(data) if isinstance(data, str) else data
-        raise PmccError(f"GET {path} failed after re-login")
-
-    async def _poll_loop(self) -> None:
-        """Periodically refresh history-derived totals and the current limit."""
-        while True:
-            try:
-                await self._poll()
-            except asyncio.CancelledError:
-                raise
-            except Exception as err:  # noqa: BLE001 - keep polling on failure
-                _LOGGER.debug("Charger %s REST poll failed: %s", self.host, err)
-            await asyncio.sleep(POLL_INTERVAL)
-
-    async def _poll(self) -> None:
-        history = await self._authed_get(HISTORY_PATH)
-        if isinstance(history, list) and history:
-            total = sum(float(s.get("energySumKwh") or 0.0) for s in history)
-            self.total_energy_kwh = round(total, 3)
-            # Most recent session first (as observed); fall back to latest endTime.
-            self.last_session = max(
-                history, key=lambda s: s.get("endTime") or "", default=history[0]
-            )
-
-        try:
-            limit = await self._authed_get(CURRENT_LIMIT_PATH)
-            self.current_limit = int(limit)
-        except (PmccError, ValueError, TypeError):
-            pass
-
         self.async_update_listeners()
 
 

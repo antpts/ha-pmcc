@@ -13,11 +13,10 @@ WS_PATH = "/ws"
 JWT_LOGIN_PATH = "/jwt/login"
 JWT_REFRESH_PATH = "/jwt/refresh"
 CURRENT_LIMIT_PATH = "/v1/api/SCC/properties/propHMICurrentLimit"
-HISTORY_PATH = "/v1/api/WebServer/properties/swaggerHistory"
 WEB_USER = "user"
 
-# How often to poll the REST API for charging history / current limit (seconds).
-POLL_INTERVAL = 300
+# State of charge fields report -1 when the vehicle doesn't share SoC.
+SOC_UNKNOWN = -1
 
 # Current limit bounds (Amps), per this charger's HMI range (6-20 A).
 # Values below the minimum charging current are rounded up to it.
@@ -174,20 +173,17 @@ METRICS: dict[str, dict] = {
     "de.bebro.WebServer.swaggerHistory": {"pretty_name": "Charging history", "entity_category": "diagnostic"},
 
     # ---- WebServer: Cumulative charging data ----
-    # Lifetime total pushed over the WebSocket during sessions only (the REST
-    # endpoint is 403 for the home user, and the charger only streams while
-    # awake/charging). Enabled so a charging session reveals whether it streams.
+    # Lifetime total, pushed over the WebSocket while charging (REST endpoint is
+    # 403 for the home user). This is the Energy Dashboard source.
     "de.bebro.WebServer.cumulativeChargingData.totalEnergy": {
-        "pretty_name": "Total charging energy (live)",
+        "pretty_name": "Total charging energy",
         "unit": "kWh",
         "device_class": "energy",
         "state_class": "total_increasing",
     },
+    # Lifetime charging time, reported as an "H:MM:SS" string (not numeric).
     "de.bebro.WebServer.cumulativeChargingData.totalTime": {
         "pretty_name": "Total charging time",
-        "unit": "s",
-        "device_class": "duration",
-        "state_class": "total_increasing",
     },
 
     # ---- WebServer: Current session ----
