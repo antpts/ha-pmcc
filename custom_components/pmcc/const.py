@@ -184,9 +184,13 @@ METRICS: dict[str, dict] = {
         "device_class": "energy",
         "state_class": "total_increasing",
     },
-    # Lifetime charging time, reported as an "H:MM:SS" string (not numeric).
+    # Lifetime charging time, reported as an "H:MM:SS" string; parsed to seconds
+    # by the sensor's numeric coercion.
     "de.bebro.WebServer.cumulativeChargingData.totalTime": {
         "pretty_name": "Total charging time",
+        "unit": "s",
+        "device_class": "duration",
+        "state_class": "total_increasing",
     },
 
     # ---- WebServer: Current session ----

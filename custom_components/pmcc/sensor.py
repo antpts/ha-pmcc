@@ -82,6 +82,9 @@ class PmccSensor(PmccEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{description.key}"
+        # Sensors with a state_class must yield numbers (HA rejects strings and
+        # spams the log otherwise), so coerce/parse rather than pass through.
+        self._numeric = description.state_class is not None
 
     @property
     def native_value(self) -> Any:
@@ -94,11 +97,42 @@ class PmccSensor(PmccEntity, SensorEntity):
             and value == SOC_UNKNOWN
         ):
             return None
+        if self._numeric:
+            return self._to_number(value, self.entity_description.device_class)
         if isinstance(value, (dict, list)):
             return json.dumps(value, separators=(",", ":"))[:_MAX_STATE_LEN]
         if isinstance(value, str):
             return value[:_MAX_STATE_LEN]
         return value
+
+    @staticmethod
+    def _to_number(value: Any, device_class: SensorDeviceClass | None) -> float | None:
+        """Coerce a charger value to a number, or None if it isn't one.
+
+        Handles the charger's quirks: empty strings (e.g. unset costs) and the
+        "H:MM:SS" duration string (e.g. total charging time) -> seconds.
+        """
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return value
+        if not isinstance(value, str):
+            return None
+        text = value.strip()
+        if not text:
+            return None
+        if device_class == SensorDeviceClass.DURATION and ":" in text:
+            try:
+                seconds = 0
+                for part in text.split(":"):
+                    seconds = seconds * 60 + int(part)
+                return seconds
+            except ValueError:
+                return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
 
 
 class PmccLastUpdate(PmccEntity, SensorEntity):
@@ -155,7 +189,12 @@ class PmccTotalEnergy(PmccEntity, RestoreSensor):
     @property
     def native_value(self) -> float | None:
         live = self.coordinator.data.get(self.entity_description.key)
-        candidates = [
-            float(v) for v in (live, self._restored) if v is not None
-        ]
+        candidates = []
+        for v in (live, self._restored):
+            if v is None:
+                continue
+            try:
+                candidates.append(float(v))
+            except (TypeError, ValueError):
+                continue
         return max(candidates) if candidates else None
